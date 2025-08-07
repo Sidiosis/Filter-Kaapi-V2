@@ -4,9 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FILTER KAAPI: Interactive Note-Taking App Prototype</title>
-    <link rel="manifest" href="manifest.json">
-    <link rel="icon" href="icon.png" sizes="512x512" type="image/png">
-    <meta name="theme-color" content="#1A0F0E">
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body {
@@ -61,6 +58,18 @@
             background-color: #4f46e5;
             color: #ffffff;
         }
+        /* Updated style for highlighted default tags (distinct bright green color) */
+        .suggestive-tags-container .suggestive-tag-btn.highlight {
+            background-color: #22c55e; /* Bright Green */
+            color: #ffffff;
+            border-color: #16a34a; /* Slightly darker green border */
+            font-weight: 600;
+        }
+        .suggestive-tags-container .suggestive-tag-btn.highlight:hover {
+            background-color: #16a34a; /* Darker green on hover */
+            border-color: #16a34a;
+        }
+
         .note-card.dragging {
             opacity: 0.5;
             transform: scale(0.98);
@@ -135,6 +144,22 @@
         }
         .text-cream {
             color: #F5F5DC; /* A light, creamy color */
+        }
+
+        /* Validation Message Style */
+        #validation-message {
+            background-color: #ef4444; /* Red-500 */
+            color: white;
+            padding: 8px 12px;
+            border-radius: 6px;
+            margin-bottom: 16px;
+            text-align: center;
+            font-size: 0.875rem;
+            opacity: 0;
+            transition: opacity 0.3s ease-in-out;
+        }
+        #validation-message.show {
+            opacity: 1;
         }
     </style>
 </head>
@@ -220,6 +245,13 @@
                         <label for="note-content" class="block text-sm font-medium text-slate-300 mb-1">Content</label>
                         <textarea id="note-content" rows="4" class="w-full px-3 py-2 border border-slate-600 bg-slate-700 text-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"></textarea>
                     </div>
+                    
+                    <!-- Moved "This is a To-Do item" checkbox here -->
+                    <div class="flex items-center mb-4">
+                        <input type="checkbox" id="note-is-todo" class="h-4 w-4 text-indigo-600 border-slate-600 bg-slate-700 rounded focus:ring-indigo-500">
+                        <label for="note-is-todo" class="ml-2 block text-sm text-slate-100">This is a To-Do item</label>
+                    </div>
+
                     <div class="mb-4">
                         <label for="note-tags" class="block text-sm font-medium text-slate-300 mb-1">Filters</label>
                         <div class="tag-input-container border border-slate-600 rounded-md p-2 bg-slate-700">
@@ -232,19 +264,18 @@
                         <div id="suggestive-tags-container" class="flex flex-wrap gap-2">
                         </div>
                     </div>
-                    <div class="flex items-center mb-4">
-                        <input type="checkbox" id="note-is-todo" class="h-4 w-4 text-indigo-600 border-slate-600 bg-slate-700 rounded focus:ring-indigo-500">
-                        <label for="note-is-todo" class="ml-2 block text-sm text-slate-100">This is a To-Do item</label>
-                    </div>
+                    
 
-                    <!-- Sub-tasks Section (initially hidden) -->
-                    <div id="subtasks-section" class="hidden mb-4">
+                    <!-- Sub-tasks Section (now always visible) -->
+                    <div id="subtasks-section" class="mb-4">
                         <label class="block text-sm font-medium text-slate-300 mb-2">Sub-tasks</label>
                         <div id="subtasks-list" class="bg-slate-700 rounded-md p-3 mb-2">
                             <!-- Sub-tasks will be rendered here -->
                         </div>
                         <input type="text" id="subtask-input" class="w-full px-3 py-2 border border-slate-600 bg-slate-700 text-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" placeholder="Add a sub-task and press Enter...">
                     </div>
+                    <!-- Validation Message Display -->
+                    <div id="validation-message" class="hidden"></div>
                 </form>
             </div>
             <div class="p-4 bg-slate-700 border-t border-slate-600 flex justify-end gap-3">
@@ -304,9 +335,7 @@
             const showPriorityMatrixBtn = document.getElementById('show-priority-matrix-btn');
             const eisenhowerMatrixEl = document.getElementById('eisenhower-matrix');
             const tagFilterSection = document.getElementById('tag-filter-section');
-            // Removed theme toggle button and icon elements
-            // const themeToggleBtn = document.getElementById('theme-toggle-btn');
-            // const themeToggleIcon = themeToggleBtn.querySelector('svg');
+            const validationMessageEl = document.getElementById('validation-message');
 
             let doQuadrantEl = document.querySelector('#do-quadrant > div');
             let decideQuadrantEl = document.querySelector('#decide-quadrant > div');
@@ -320,6 +349,12 @@
             const subtasksSection = document.getElementById('subtasks-section');
             const subtasksList = document.getElementById('subtasks-list');
             const subtaskInput = document.getElementById('subtask-input');
+
+            let expandedNotes = new Set();
+            let modalSubtasks = [];
+
+            // Define the initial protected default tags
+            const PROTECTED_DEFAULT_TAGS = ['Imp', 'Urgent', 'Not Imp', 'Not Urgent'];
 
             // Load notes from Local Storage or use default if none exist
             let notes = JSON.parse(localStorage.getItem('notes')) || [
@@ -335,8 +370,15 @@
                 { id: 10, title: 'Learn new recipe: Vegan Chili', content: 'Found a great recipe online. Need to buy ingredients: kidney beans, black beans, tomatoes, chili powder, cumin, bell peppers. Try cooking it on Sunday.', isTodo: true, isCompleted: false, tags: ['Personal', 'Cooking', 'Hobby'], subtasks: [{text: 'Find recipe', isCompleted: true}, {text: 'Buy ingredients', isCompleted: false}] }
             ];
 
-            // Load default tags from Local Storage or use default if none exist
-            let defaultTags = JSON.parse(localStorage.getItem('defaultTags')) || ['Imp', 'Urgent', 'Not Imp', 'Not Urgent'];
+            // Load default tags from Local Storage or ensure protected tags are present
+            let defaultTags = JSON.parse(localStorage.getItem('defaultTags')) || [];
+            // Ensure protected tags are always in defaultTags
+            PROTECTED_DEFAULT_TAGS.forEach(tag => {
+                if (!defaultTags.includes(tag)) {
+                    defaultTags.push(tag);
+                }
+            });
+
             let allTags = new Set(defaultTags);
             let selectedFilters = new Set();
             let currentEditTags = new Set();
@@ -373,6 +415,18 @@
                 });
             };
 
+            // Function to display validation message
+            const displayValidationMessage = (message) => {
+                validationMessageEl.textContent = message;
+                validationMessageEl.classList.remove('hidden');
+                validationMessageEl.classList.add('show');
+                setTimeout(() => {
+                    validationMessageEl.classList.remove('show');
+                    validationMessageEl.classList.add('hidden');
+                }, 3000); // Hide after 3 seconds
+            };
+
+
             window.toggleTodoStatus = (id) => {
                 const note = notes.find(n => n.id === id);
                 if (note) {
@@ -384,9 +438,17 @@
 
             window.toggleContent = (event, id) => {
                 const contentEl = document.getElementById(`content-${id}`);
-                // Only toggle content if the click wasn't on the checkbox itself
+                const toggleBtn = document.getElementById(`toggle-btn-${id}`);
+                // Only toggle content if the click wasn't on the checkbox itself or action buttons
                 if (event.target.tagName !== 'INPUT' && event.target.tagName !== 'BUTTON' && event.target.closest('button') === null) {
                     contentEl.classList.toggle('hidden');
+                    if (contentEl.classList.contains('hidden')) {
+                        toggleBtn.querySelector('svg').style.transform = 'rotate(0deg)';
+                        expandedNotes.delete(id); // Remove from expanded set
+                    } else {
+                        toggleBtn.querySelector('svg').style.transform = 'rotate(180deg)';
+                        expandedNotes.add(id); // Add to expanded set
+                    }
                 }
             };
 
@@ -399,23 +461,31 @@
             };
 
             // Sub-task functions
-            window.toggleSubtaskStatus = (noteId, subtaskIndex) => {
-                const note = notes.find(n => n.id === noteId);
-                if (note && note.subtasks && note.subtasks[subtaskIndex]) {
-                    note.subtasks[subtaskIndex].isCompleted = !note.subtasks[subtaskIndex].isCompleted;
-                    saveNotes();
-                    renderApp();
-                    openModal(noteId); // Re-render modal to show updated subtasks
+            window.toggleSubtaskStatus = (noteIdFromRender, subtaskIndex) => {
+                // If noteIdFromRender is null or an empty string, it's a new entry being edited in the modal
+                if (noteIdFromRender === null || noteIdFromRender === '') {
+                    modalSubtasks[subtaskIndex].isCompleted = !modalSubtasks[subtaskIndex].isCompleted;
+                    renderSubtasks(modalSubtasks, ''); // Re-render modal subtasks, consistently pass '' for new
+                } else { // Existing note context
+                    // Since modalSubtasks is a reference to noteToModify.subtasks,
+                    // modifying modalSubtasks directly updates the original note.
+                    modalSubtasks[subtaskIndex].isCompleted = !modalSubtasks[subtaskIndex].isCompleted;
+                    saveNotes(); // Save the change to local storage
+                    renderSubtasks(modalSubtasks, noteIdFromRender); // Re-render modal subtasks
                 }
             };
 
-            window.deleteSubtask = (noteId, subtaskIndex) => {
-                const note = notes.find(n => n.id === noteId);
-                if (note && note.subtasks) {
-                    note.subtasks.splice(subtaskIndex, 1);
-                    saveNotes();
-                    renderApp();
-                    openModal(noteId); // Re-render modal to show updated subtasks
+            window.deleteSubtask = (noteIdFromRender, subtaskIndex) => {
+                // If noteIdFromRender is null or an empty string, it's a new entry being edited in the modal
+                if (noteIdFromRender === null || noteIdFromRender === '') {
+                    modalSubtasks.splice(subtaskIndex, 1);
+                    renderSubtasks(modalSubtasks, ''); // Re-render modal subtasks
+                } else { // Existing note context
+                    // Since modalSubtasks is a reference to noteToModify.subtasks,
+                    // modifying modalSubtasks directly updates the original note.
+                    modalSubtasks.splice(subtaskIndex, 1);
+                    saveNotes(); // Save the change to local storage
+                    renderSubtasks(modalSubtasks, noteIdFromRender); // Re-render modal subtasks
                 }
             };
 
@@ -534,14 +604,14 @@
                         const tagsHtml = note.tags.map(tag => `<span class="bg-indigo-600 text-white text-xs font-medium mr-2 px-2.5 py-0.5 rounded-full">${tag}</span>`).join('');
 
                         let subtasksHtml = '';
-                        if (note.isTodo && note.subtasks && note.subtasks.length > 0) {
+                        if (note.subtasks && note.subtasks.length > 0) { // Removed isTodo condition
                             subtasksHtml = `
                                 <div class="mt-2 pt-2 border-t border-slate-700">
                                     <p class="text-xs font-semibold text-slate-400 mb-1">Sub-tasks:</p>
                                     <ul class="list-disc list-inside text-sm text-slate-300">
-                                        ${note.subtasks.map(sub => `
+                                        ${note.subtasks.map((sub, index) => `
                                             <li class="flex items-center ${sub.isCompleted ? 'line-through text-slate-500' : ''}">
-                                                <input type="checkbox" ${sub.isCompleted ? 'checked' : ''} class="mr-2 h-4 w-4 rounded border-slate-600 bg-slate-700 text-indigo-600 focus:ring-indigo-500 cursor-pointer" onclick="event.stopPropagation(); toggleSubtaskStatus(${note.id}, ${note.subtasks.indexOf(sub)});"/>
+                                                <input type="checkbox" ${sub.isCompleted ? 'checked' : ''} class="mr-2 h-4 w-4 rounded border-slate-600 bg-slate-700 text-indigo-600 focus:ring-indigo-500 cursor-pointer" onclick="event.stopPropagation(); toggleSubtaskStatus(${note.id}, ${index});"/>
                                                 <span>${sub.text}</span>
                                             </li>
                                         `).join('')}
@@ -591,6 +661,14 @@
                             </div>
                         `;
                         notesListEl.appendChild(card);
+
+                        // Re-expand notes that were previously expanded
+                        if (expandedNotes.has(note.id)) {
+                            const contentEl = document.getElementById(`content-${note.id}`);
+                            const toggleBtn = document.getElementById(`toggle-btn-${note.id}`);
+                            if (contentEl) contentEl.classList.remove('hidden');
+                            if (toggleBtn) toggleBtn.querySelector('svg').style.transform = 'rotate(180deg)';
+                        }
                     });
                 }
 
@@ -770,6 +848,7 @@
                 currentEditTags.clear();
                 subtasksList.innerHTML = ''; // Clear subtasks list
                 subtaskInput.value = ''; // Clear subtask input
+                validationMessageEl.classList.add('hidden'); // Hide validation message on modal open
 
                 let currentNote = null;
 
@@ -781,19 +860,20 @@
                     noteContentInput.value = currentNote.content;
                     noteIsTodoInput.checked = currentNote.isTodo;
                     currentNote.tags.forEach(tag => currentEditTags.add(tag));
-                    
-                    // Populate subtasks if it's a todo
-                    if (currentNote.isTodo && currentNote.subtasks) {
-                        renderSubtasks(currentNote.subtasks, currentNote.id);
-                        subtasksSection.classList.remove('hidden');
-                    } else {
-                        subtasksSection.classList.add('hidden');
+                    modalSubtasks = currentNote.subtasks;
+                    if (!modalSubtasks) { 
+                        modalSubtasks = [];
+                        currentNote.subtasks = modalSubtasks;
                     }
+                    // Subtasks section is now always visible, no need to toggle hidden class here
+                    renderSubtasks(modalSubtasks, currentNote.id);
 
                 } else {
                     modalTitle.textContent = 'Add New Entry';
                     noteIdInput.value = '';
-                    subtasksSection.classList.add('hidden'); // Hide subtasks for new notes by default
+                    modalSubtasks = [];
+                    // Subtasks section is now always visible, no need to toggle hidden class here
+                    renderSubtasks(modalSubtasks, '');
                 }
                 renderTagPills();
                 renderSuggestiveTags();
@@ -824,8 +904,20 @@
                     const button = document.createElement('button');
                     button.textContent = tag;
                     button.className = 'suggestive-tag-btn';
+                    // Add highlight class if it's one of the protected default tags
+                    if (PROTECTED_DEFAULT_TAGS.includes(tag)) {
+                        button.classList.add('highlight');
+                    }
                     button.type = 'button';
                     button.onclick = () => {
+                        if ((tag === 'Imp' && currentEditTags.has('Not Imp')) ||
+                            (tag === 'Not Imp' && currentEditTags.has('Imp')) ||
+                            (tag === 'Urgent' && currentEditTags.has('Not Urgent')) ||
+                            (tag === 'Not Urgent' && currentEditTags.has('Urgent'))) {
+                            console.warn(`Cannot add conflicting tag: ${tag}`);
+                            displayValidationMessage(`Cannot add conflicting tag: "${tag}". Remove its opposite first.`);
+                            return;
+                        }
                         currentEditTags.add(tag);
                         renderTagPills();
                     };
@@ -844,49 +936,27 @@
                         subtaskEl.className = `subtask-item ${subtask.isCompleted ? 'completed' : ''}`;
                         subtaskEl.innerHTML = `
                             <label class="flex items-center flex-grow cursor-pointer">
-                                <input type="checkbox" ${subtask.isCompleted ? 'checked' : ''} class="h-4 w-4 text-indigo-600 border-slate-600 bg-slate-700 rounded focus:ring-indigo-500 mr-2" onclick="toggleSubtaskStatus(${noteId}, ${index})">
+                                <input type="checkbox" ${subtask.isCompleted ? 'checked' : ''} class="h-4 w-4 text-indigo-600 border-slate-600 bg-slate-700 rounded focus:ring-indigo-500 mr-2" onclick="toggleSubtaskStatus(${noteId === '' ? null : noteId}, ${index})">
                                 <span class="subtask-text">${subtask.text}</span>
                             </label>
-                            <button type="button" class="text-red-400 hover:text-red-600 ml-2" onclick="deleteSubtask(${noteId}, ${index})">&times;</button>
+                            <button type="button" class="text-red-400 hover:text-red-600 ml-2" onclick="deleteSubtask(${noteId === '' ? null : noteId}, ${index})">&times;</button>
                         `;
                         subtasksList.appendChild(subtaskEl);
                     });
                 }
             };
 
-            noteIsTodoInput.addEventListener('change', () => {
-                if (noteIsTodoInput.checked) {
-                    subtasksSection.classList.remove('hidden');
-                    const currentNote = notes.find(n => n.id == noteIdInput.value);
-                    if (currentNote && currentNote.subtasks) {
-                        renderSubtasks(currentNote.subtasks, currentNote.id);
-                    } else {
-                        renderSubtasks([], null); // Render empty if no subtasks or new note
-                    }
-                } else {
-                    subtasksSection.classList.add('hidden');
-                }
-            });
+            // Removed noteIsTodoInput.addEventListener('change') as subtasks section is always visible
+            // subtasksSection.classList.remove('hidden'); is now handled by default HTML
 
             subtaskInput.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter') {
                     e.preventDefault();
                     const newSubtaskText = subtaskInput.value.trim();
                     if (newSubtaskText) {
-                        let currentNote = notes.find(n => n.id == noteIdInput.value);
-                        if (!currentNote) {
-                            // If it's a new note, create a temporary one to hold subtasks
-                            currentNote = { id: Date.now(), title: '', content: '', isTodo: true, isCompleted: false, tags: [], subtasks: [] };
-                            notes.push(currentNote);
-                            noteIdInput.value = currentNote.id; // Set the ID so it's associated
-                        }
-                        if (!currentNote.subtasks) {
-                            currentNote.subtasks = [];
-                        }
-                        currentNote.subtasks.push({ text: newSubtaskText, isCompleted: false });
+                        modalSubtasks.push({ text: newSubtaskText, isCompleted: false });
                         subtaskInput.value = '';
-                        saveNotes();
-                        renderSubtasks(currentNote.subtasks, currentNote.id);
+                        renderSubtasks(modalSubtasks, noteIdInput.value);
                     }
                 }
             });
@@ -905,6 +975,13 @@
                     e.preventDefault();
                     const newTag = tagInput.value.trim();
                     if (newTag) {
+                        if ((newTag === 'Imp' && currentEditTags.has('Not Imp')) ||
+                            (newTag === 'Not Imp' && currentEditTags.has('Imp')) ||
+                            (newTag === 'Urgent' && currentEditTags.has('Not Urgent')) ||
+                            (newTag === 'Not Urgent' && currentEditTags.has('Urgent'))) {
+                            displayValidationMessage(`Cannot add conflicting tag: "${newTag}". Remove its opposite first.`);
+                            return;
+                        }
                         currentEditTags.add(newTag);
                         tagInput.value = '';
                         renderTagPills();
@@ -914,6 +991,16 @@
 
             noteForm.addEventListener('submit', (e) => {
                 e.preventDefault();
+
+                // Validation for To-Do items requiring at least TWO priority tags
+                if (noteIsTodoInput.checked) {
+                    const selectedPriorityTagsCount = PROTECTED_DEFAULT_TAGS.filter(tag => currentEditTags.has(tag)).length;
+                    if (selectedPriorityTagsCount < 2) {
+                        displayValidationMessage('To-Do items require at least two of the "Imp", "Urgent", "Not Imp", or "Not Urgent" tags.');
+                        return; // Prevent form submission
+                    }
+                }
+
                 const id = noteIdInput.value;
                 const existingNote = id ? notes.find(n => n.id == id) : null;
 
@@ -924,8 +1011,7 @@
                     isTodo: noteIsTodoInput.checked,
                     isCompleted: existingNote ? existingNote.isCompleted : false,
                     tags: Array.from(currentEditTags),
-                    // Preserve existing subtasks if editing, otherwise initialize empty
-                    subtasks: existingNote && existingNote.subtasks ? existingNote.subtasks : []
+                    subtasks: modalSubtasks // Ensure subtasks are saved
                 };
 
                 if (id) {
@@ -935,7 +1021,7 @@
                     notes.push(newNote);
                 }
 
-                saveNotes(); // Save notes after adding/editing
+                saveNotes();
                 updateAllTags();
                 closeModal();
                 renderApp();
@@ -970,7 +1056,7 @@
                     allTags.add(newTag);
                     defaultTags.push(newTag);
                     newTagInput.value = '';
-                    saveAllTags(); // Save tags after adding new tag
+                    saveAllTags();
                     renderManageTagsList();
                     renderTags();
                 }
@@ -983,7 +1069,7 @@
                     listItem.className = 'tag-list-item text-slate-100';
                     listItem.innerHTML = `
                         <span>${tag}</span>
-                        <button class="text-red-500 hover:text-red-700" data-tag="${tag}">&times;</button>
+                        ${PROTECTED_DEFAULT_TAGS.includes(tag) ? '' : `<button class="text-red-500 hover:text-red-700" data-tag="${tag}">&times;</button>`}
                     `;
                     manageTagsList.appendChild(listItem);
                 });
@@ -992,14 +1078,18 @@
             manageTagsList.addEventListener('click', (e) => {
                 if (e.target.tagName === 'BUTTON' && e.target.dataset.tag) {
                     const tagToDelete = e.target.dataset.tag;
+                    if (PROTECTED_DEFAULT_TAGS.includes(tagToDelete)) {
+                        console.warn(`Cannot delete protected default tag: ${tagToDelete}`);
+                        return;
+                    }
+
                     allTags.delete(tagToDelete);
                     defaultTags = defaultTags.filter(tag => tag !== tagToDelete);
-                    // Remove from any notes that might have this tag
                     notes.forEach(note => {
                         note.tags = note.tags.filter(tag => tag !== tagToDelete);
                     });
-                    saveNotes(); // Save notes after tag removal
-                    saveAllTags(); // Save tags after removal
+                    saveNotes();
+                    saveAllTags();
                     renderManageTagsList();
                     renderTags();
                     renderApp();
@@ -1007,20 +1097,10 @@
             });
             // --- End Manage Filters Modal Logic ---
 
-            // Removed theme toggle logic
-
             updateAllTags();
             renderTags();
             renderApp();
         });
     </script>
-    <script>
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('service-worker.js')
-         .then(reg => console.log('✅ Service Worker registered', reg))
-         .catch(err => console.error('❌ Service Worker registration failed', err));
-  }
-</script>
-
 </body>
 </html>
