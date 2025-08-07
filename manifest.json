@@ -1,16 +1,29 @@
 {
-    "name": "Filter Kaapi",
-    "short_name": "Kaapi",
-    "start_url": "./index.html",
-    "display": "standalone",
-    "background_color": "#1A0F0E",
-    "theme_color": "#1A0F0E",
-    "orientation": "portrait",
-    "icons": [
-        {
-            "src": "icon.png",
-            "sizes": "512x512",
-            "type": "image/png"
-        }
-    ]
+  "name": "Filter Kaapi",
+  "short_name": "Kaapi",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#1A0F0E",
+  "theme_color": "#1A0F0E",
+  "description": "Your cozy, offline-first note & task manager. No accounts, just kaapi.",
+  "id": "/",
+  "launch_handler": {
+    "client_mode": "focus-existing"
+  },
+  "screenshots": [
+    {
+      "src": "screenshot1.png",
+      "sizes": "800x600",
+      "type": "image/png",
+      "label": "Main interface showing task lists"
+    }
+  ],
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "icon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
 }
