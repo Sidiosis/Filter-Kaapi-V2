@@ -1,11 +1,24 @@
 {
     "name": "Filter Kaapi",
     "short_name": "Kaapi",
+    "id": "com.filterkaapi.app",
+    "description": "A simple, elegant task & note-taking app brewed with focus.",
     "start_url": "./index.html",
     "display": "standalone",
     "background_color": "#1A0F0E",
     "theme_color": "#1A0F0E",
     "orientation": "portrait",
+    "launch_handler": {
+        "client_mode": "navigate-existing"
+    },
+    "screenshots": [
+        {
+            "src": "screenshot1.png",
+            "type": "image/png",
+            "sizes": "1280x720",
+            "label": "Main screen"
+        }
+    ],
     "icons": [
         {
             "src": "icon.png",
