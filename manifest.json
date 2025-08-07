@@ -1,0 +1,16 @@
+{
+    "name": "Filter Kaapi",
+    "short_name": "Kaapi",
+    "start_url": "./index.html",
+    "display": "standalone",
+    "background_color": "#1A0F0E",
+    "theme_color": "#1A0F0E",
+    "orientation": "portrait",
+    "icons": [
+        {
+            "src": "icon.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        }
+    ]
+}
