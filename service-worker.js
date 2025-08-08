@@ -1,11 +1,14 @@
 self.addEventListener("install", e => {
   e.waitUntil(
-    caches.open("kaapi-cache").then(cache => {
+    caches.open("kaapi-cache-v1").then(cache => {
       return cache.addAll([
-        "./",
-        "./index.html",
-        "./icon.png",
-        "./manifest.json"
+        "/Filter-kaapi/",
+        "/Filter-kaapi/index.html",
+        "/Filter-kaapi/style.css",
+        "/Filter-kaapi/app.js",
+        "/Filter-kaapi/icons/icon-192.png",
+        "/Filter-kaapi/icons/icon-512.png",
+        "/Filter-kaapi/manifest.json"
       ]);
     })
   );
